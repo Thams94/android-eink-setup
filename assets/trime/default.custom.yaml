@@ -1,0 +1,7 @@
+# Trime/Rime 用户定制：默认使用微软双拼，输出简体
+patch:
+  schema_list:
+    - schema: double_pinyin_mspy
+    - schema: luna_pinyin_simp
+    - schema: luna_pinyin
+  "switches/@2/reset": 1
