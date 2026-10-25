@@ -1,0 +1,3 @@
+# 微软双拼：默认输出简体
+patch:
+  "switches/@2/reset": 1
