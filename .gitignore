@@ -1,0 +1,22 @@
+# APKs are downloaded on demand, never committed
+*.apk
+*.apks
+*.xapk
+
+# per-device artefacts
+packages-*.txt
+disabled-*.txt
+screenshot*.png
+home*.png
+*.log
+
+# keep documentation images
+!docs/*.png
+
+# editors / OS
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc
+.vscode/
+.idea/
