@@ -1,8 +1,13 @@
 # Trime (同文输入法) on an e-ink device
 
 Trime is a Rime front-end: ~8.6 MB, no network permission, no ads, and a native
-engine that stays out of memory when idle. Its stock themes are colourful and its
-stock schemas do **not** include double pinyin (双拼) — both need work.
+engine that stays out of memory when idle.
+
+Its stock schemas are all **full pinyin (全拼)** — `luna_pinyin`, `luna_pinyin_simp`,
+`luna_pinyin_fluency`, … — so 全拼 works out of the box and is the default this skill
+installs. Double pinyin (双拼) is **not** bundled; it is an opt-in extra, see below.
+
+Its stock themes are colourful, so the bundled `纯黑白.trime.yaml` still matters.
 
 ## Install
 
@@ -32,20 +37,33 @@ The first-run wizard offers two storage modes. Only one is scriptable:
 The chosen directory is not just a sync source: Trime uses it as its live Rime user
 directory, so `build/` and `user.yaml` appear there.
 
-## Adding a schema
+## Schemas: 全拼 by default, 双拼 optional
 
-Trime 3.3.12 ships `luna_pinyin*` and `stroke` only. Double pinyin lives in the
-Rime `rime-double-pinyin` project:
+Full pinyin needs no extra files. Push the ordering file and you are done:
 
 ```bash
 RIME=/sdcard/Android/data/com.osfans.trime/files/rime
-adb push double_pinyin_mspy.schema.yaml      $RIME/   # 微软双拼
-adb push double_pinyin_mspy.custom.yaml      $RIME/   # force simplified output
-adb push default.custom.yaml                 $RIME/   # schema_list order
+adb push default.custom.yaml $RIME/    # luna_pinyin_simp first, 全拼
 adb shell am force-stop com.osfans.trime
 ```
 
 `default.custom.yaml`:
+
+```yaml
+patch:
+  schema_list:
+    - schema: luna_pinyin_simp      # 明月拼音·简化字（全拼）
+    - schema: luna_pinyin
+  "switches/@2/reset": 1            # 默认输出简体
+```
+
+**Only if the user explicitly asks for 双拼** (微软/小鹤/自然码…), also push the
+optional files from `assets/trime/optional/double-pinyin/` and uncomment the schema:
+
+```bash
+adb push assets/trime/optional/double-pinyin/double_pinyin_mspy.schema.yaml     $RIME/
+adb push assets/trime/optional/double-pinyin/double_pinyin_mspy.custom.yaml     $RIME/
+```
 
 ```yaml
 patch:
@@ -55,7 +73,7 @@ patch:
     - schema: luna_pinyin
 ```
 
-`double_pinyin_mspy.custom.yaml`:
+`double_pinyin_mspy.custom.yaml` forces simplified output:
 
 ```yaml
 patch:
@@ -65,23 +83,24 @@ patch:
 Then deploy (键盘样式 page or the ↻ button) and check the log:
 
 ```bash
-adb logcat -d | grep -E "updating schemas|double_pinyin_mspy"
+adb logcat -d | grep -E "updating schemas"
 # finished updating schemas: 4 success, 0 failure
 ```
 
-Verify typing: the pre-edit area shows decoded pinyin ("ni hk" → 你好) and the space
-bar shows the schema name.
+Verify typing: the pre-edit area shows decoded pinyin and the space bar shows the
+schema name (`明月拼音·简化字` for 全拼, `微軟雙拼` for the optional double pinyin).
 
 ## Selecting the default schema
 
-Trime remembers the last schema in `user.yaml`. Write it directly to skip the tap:
+Trime remembers the last schema in `user.yaml`. Write it directly to skip the tap —
+for the default 全拼 install:
 
 ```yaml
 var:
   last_build_time: 1792907496
-  previously_selected_schema: double_pinyin_mspy
+  previously_selected_schema: luna_pinyin_simp
   schema_access_time:
-    double_pinyin_mspy: 1792907496
+    luna_pinyin_simp: 1792907496
 ```
 
 ## Making it black and white
