@@ -4,6 +4,12 @@ A package is a candidate for `pm disable-user` when disabling it removes an
 advertisement surface, an updater, or a duplicate app the user does not use — and
 nothing on the boot path depends on it.
 
+> **Scope: system packages only.** The input to this table is
+> `adb shell pm list packages -s`. Anything that shows up in
+> `adb shell pm list packages -3` was installed by the user and is never a target,
+> no matter how "bloaty" it looks. `scripts/eink-adb.ps1 disable` enforces this and
+> refuses non-system packages unless you pass `-IncludeUserApps`.
+
 ## Never disable
 
 | Category | Packages | Why |
@@ -31,8 +37,8 @@ nothing on the boot path depends on it.
 | Misc AOSP | `com.android.email`, `com.android.calculator2`, `com.android.musicfx`, `com.svox.pico`, `com.android.htmlviewer`, `com.android.bookmarkprovider` | Individually harmless |
 | CTS shims | `com.android.cts.ctsshim`, `com.android.cts.priv.ctsshim` | Certification stubs |
 | Boot animation | `com.mas.bootloading`, `*bootanimation*` | Only the splash |
-| Stock launcher | `com.moan.launcher`, `com.boox.launcher` | Only after the replacement is default |
-| Stock IME | `com.sohu.inputmethod.sogou.oem`, `com.baidu.input*`, `com.iflytek.inputmethod*` | Only after the replacement types correctly |
+| Stock launcher | `com.moan.launcher`, `com.boox.launcher` | **Only if** the user asked for a new launcher *and* it is already the default home |
+| Stock IME | `com.sohu.inputmethod.sogou.oem`, `com.baidu.input*`, `com.iflytek.inputmethod*` | **Only if** the user asked for a new keyboard *and* it already types correctly |
 
 ## Reading a name correctly
 
@@ -46,8 +52,13 @@ user why. A disabled unknown package is not worth a support call.
 
 ## Ordering
 
-1. Launcher: install → set home → verify → *then* disable the old launcher.
-2. IME: install → enable → verify typing → *then* disable the old IME, and rewrite
-   `enabled_input_methods` in the same step.
+Batched debloating is fine on its own — the launcher and IME only matter if those
+optional stages were accepted:
+
+1. If a new launcher was requested: install → set home → verify → *then* disable the
+   old launcher. If the user said no, the stock launcher is never touched.
+2. If a new keyboard was requested: install → enable → verify typing → *then* disable
+   the old IME and rewrite `enabled_input_methods` in the same step. If the user said
+   no, the stock IME is never touched.
 3. Everything else can go in one batch, but verify `dumpsys` and the crash buffer
    immediately afterwards.
