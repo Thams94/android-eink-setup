@@ -1,7 +1,10 @@
-# Trime/Rime 用户定制：默认使用微软双拼，输出简体
+# Trime / Rime 用户定制
+# 默认方案：全拼（简体）。双拼是可选方案，见 optional/double-pinyin/。
 patch:
   schema_list:
-    - schema: double_pinyin_mspy
-    - schema: luna_pinyin_simp
-    - schema: luna_pinyin
-  "switches/@2/reset": 1
+    - schema: luna_pinyin_simp      # 明月拼音·简化字（全拼）
+    - schema: luna_pinyin           # 明月拼音（全拼，词库更全）
+    # 需要双拼时，把 optional/double-pinyin/ 里的文件也推入 rime 目录，
+    # 再取消下面一行的注释：
+    # - schema: double_pinyin_mspy  # 微软双拼
+  "switches/@2/reset": 1            # 默认输出简体
