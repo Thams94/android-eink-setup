@@ -21,14 +21,18 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('probe', 'persist', 'list', 'disable', 'enable', 'disable-file', 'enable-file', 'install', 'home', 'tcp', 'shot', 'health')]
+    [ValidateSet('probe', 'persist', 'restore-power', 'list', 'disable', 'enable', 'disable-file', 'enable-file', 'install', 'home', 'tcp', 'shot', 'health')]
     [string]$Action = 'probe',
 
     [Parameter(Position = 1, ValueFromRemainingArguments = $true)]
     [string[]]$Target,
 
     [string]$Serial = $env:ADB_SERIAL,
-    [string]$Adb = $env:ADB
+    [string]$Adb = $env:ADB,
+
+    # Debloating is a system-app operation. User-installed packages (-3) are refused
+    # unless this switch is passed explicitly.
+    [switch]$IncludeUserApps
 )
 
 $ErrorActionPreference = 'Continue'
@@ -65,6 +69,12 @@ function Assert-Device {
     }
 }
 
+function Get-SystemPackages {
+    (Invoke-Adb @('shell', 'pm', 'list', 'packages', '-s')) -split "`n" |
+        ForEach-Object { $_.Trim() -replace '^package:', '' } |
+        Where-Object { $_ }
+}
+
 switch ($Action) {
     'probe' {
         Assert-Device
@@ -80,12 +90,26 @@ switch ($Action) {
         "{0,-11}: {1}" -f 'disabled',((Invoke-Adb @('shell', 'pm', 'list', 'packages', '-d') -split "`n").Count)
     }
 
+    'restore-power' {
+        # Undo the stay-awake tweaks. On a Doze-less e-ink ROM, skipping this drains
+        # a full battery in about a day of idling.
+        Assert-Device
+        $timeout = if ($Target[0]) { $Target[0] } else { '300000' }
+        Invoke-Adb @('shell', 'settings', 'put', 'global', 'stay_on_while_plugged_in', '0') | Out-Null
+        Invoke-Adb @('shell', 'settings', 'put', 'system', 'screen_off_timeout', $timeout) | Out-Null
+        Invoke-Adb @('shell', 'svc', 'power', 'stayon', 'false') | Out-Null
+        "stay_on_while_plugged_in: " + (Invoke-Adb @('shell', 'settings', 'get', 'global', 'stay_on_while_plugged_in'))
+        "screen_off_timeout:       " + (Invoke-Adb @('shell', 'settings', 'get', 'system', 'screen_off_timeout'))
+        "check: idle one timeout period, then dumpsys power | grep mWakefulness= must read Asleep"
+    }
+
     'persist' {
         Assert-Device
         Invoke-Adb @('shell', 'settings', 'put', 'global', 'stay_on_while_plugged_in', '7') | Out-Null
-        Invoke-Adb @('shell', 'settings', 'put', 'system', 'screen_off_timeout', '2147483647') | Out-Null
+        Invoke-Adb @('shell', 'settings', 'put', 'system', 'screen_off_timeout', '300000') | Out-Null
         Invoke-Adb @('shell', 'svc', 'power', 'stayon', 'usb') | Out-Null
         "stay-awake: " + (Invoke-Adb @('shell', 'settings', 'get', 'global', 'stay_on_while_plugged_in'))
+        "remember: run 'restore-power' when you are done, or the battery will drain"
     }
 
     'list' {
@@ -101,7 +125,12 @@ switch ($Action) {
 
     'disable' {
         Assert-Device
+        $system = Get-SystemPackages
         foreach ($pkg in $Target) {
+            if ((-not $IncludeUserApps) -and ($system -notcontains $pkg)) {
+                "{0,-48} SKIP (not a system package; pass -IncludeUserApps to override)" -f $pkg
+                continue
+            }
             "{0,-48} {1}" -f $pkg, (Invoke-Adb @('shell', 'pm', 'disable-user', '--user', '0', $pkg))
         }
     }
@@ -117,8 +146,13 @@ switch ($Action) {
         Assert-Device
         $file = $Target[0]
         if (-not (Test-Path $file)) { throw "No such file: $file" }
+        $system = Get-SystemPackages
         Get-Content $file | Where-Object { $_ -and $_ -notmatch '^\s*#' } | ForEach-Object {
             $pkg = $_.Trim()
+            if ((-not $IncludeUserApps) -and ($system -notcontains $pkg)) {
+                "{0,-48} SKIP (not a system package; pass -IncludeUserApps to override)" -f $pkg
+                return
+            }
             "{0,-48} {1}" -f $pkg, (Invoke-Adb @('shell', 'pm', 'disable-user', '--user', '0', $pkg))
         }
     }
