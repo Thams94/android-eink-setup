@@ -3,6 +3,7 @@
 #
 #   ./eink-adb.sh probe                 device facts + package counts
 #   ./eink-adb.sh persist               keep the device awake while plugged in
+#   ./eink-adb.sh restore-power [ms]    undo the stay-awake tweaks (default 5 min)
 #   ./eink-adb.sh list                  write all packages to packages-<model>.txt
 #   ./eink-adb.sh disable pkg [pkg ...]    pm disable-user --user 0
 #   ./eink-adb.sh enable  pkg [pkg ...]    pm enable
@@ -38,6 +39,14 @@ require_device() {
   fi
 }
 
+# Debloating is a system-app operation. User-installed packages (-3) are refused
+# unless EINK_ALLOW_USER_APPS=1 is exported.
+is_system_pkg() {
+  adb_cmd shell pm list packages -s | sed 's/^package://' | tr -d '\r' | grep -qx -- "$1"
+}
+
+allow_user_apps() { [ "${EINK_ALLOW_USER_APPS:-0}" = "1" ]; }
+
 cmd=${1:-probe}
 shift || true
 
@@ -57,9 +66,19 @@ case "$cmd" in
   persist)
     require_device
     adb_cmd shell settings put global stay_on_while_plugged_in 7
-    adb_cmd shell settings put system screen_off_timeout 2147483647
+    adb_cmd shell settings put system screen_off_timeout 300000
     adb_cmd shell svc power stayon usb
     echo "stay-awake: $(adb_cmd shell settings get global stay_on_while_plugged_in | tr -d '\r')"
+    echo "remember: run 'restore-power' when you are done, or the battery will drain"
+    ;;
+  restore-power)
+    require_device
+    timeout=${1:-300000}
+    adb_cmd shell settings put global stay_on_while_plugged_in 0
+    adb_cmd shell settings put system screen_off_timeout "$timeout"
+    adb_cmd shell svc power stayon false
+    echo "screen_off_timeout: $(adb_cmd shell settings get system screen_off_timeout | tr -d '\r')"
+    echo "check: idle one timeout period, then dumpsys power | grep mWakefulness= must read Asleep"
     ;;
   list)
     require_device
@@ -71,6 +90,10 @@ case "$cmd" in
   disable)
     require_device
     for pkg in "$@"; do
+      if ! allow_user_apps && ! is_system_pkg "$pkg"; then
+        printf '%-48s %s\n' "$pkg" "SKIP (not a system package; set EINK_ALLOW_USER_APPS=1 to override)"
+        continue
+      fi
       printf '%-48s %s\n' "$pkg" "$(adb_cmd shell pm disable-user --user 0 "$pkg" | tr -d '\r')"
     done
     ;;
@@ -87,6 +110,10 @@ case "$cmd" in
     while IFS= read -r pkg; do
       [ -z "$pkg" ] && continue
       case "$pkg" in \#*) continue ;; esac
+      if [ "$action" = "disable" ] && ! allow_user_apps && ! is_system_pkg "$pkg"; then
+        printf '%-48s %s\n' "$pkg" "SKIP (not a system package; set EINK_ALLOW_USER_APPS=1 to override)"
+        continue
+      fi
       printf '%-48s %s\n' "$pkg" "$(adb_cmd shell pm "$action" "$pkg" | tr -d '\r')"
     done < "$1"
     ;;
